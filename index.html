@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>我要背单词</title>
+    <style>
+        :root {
+            --accent: #007AFF;
+            --bg: #F2F2F7;
+            --card: #FFFFFF;
+            --text-main: #1C1C1E;
+            --text-sub: #8E8E93;
+            --star-active: #FFCC00;
+            --master-gold: #D4AF37;
+            --danger: #FF3B30;
+        }
+
+        /* 全局去除点击蓝色高亮方块 */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+        }
+
+        body {
+            font-family: -apple-system, "SF Pro Display", "PingFang SC", sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden; 
+            display: flex;
+            flex-direction: column;
+            color: var(--text-main);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        header {
+            padding: env(safe-area-inset-top) 20px 10px;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 0.5px solid rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        .nav-icon { font-size: 20px; color: var(--accent); padding: 5px; cursor: pointer; }
+        #mode-title { font-weight: 600; font-size: 17px; }
+        .mode-active { color: var(--star-active) !important; transform: scale(1.2); }
+
+        #sidebar {
+            position: fixed;
+            left: -100%; top: 0; width: 80%; max-width: 300px; height: 100%;
+            background: white; z-index: 1000;
+            transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 10px 0 30px rgba(0,0,0,0.1);
+            padding: 20px; box-sizing: border-box; overflow-y: auto;
+        }
+        #sidebar.active { left: 0; }
+        .sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: none; z-index: 999; }
+        .sidebar-overlay.active { display: block; }
+
+        /* 二级菜单样式 */
+        .book-item {
+            background: #F2F2F7;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .book-info { display: flex; align-items: center; gap: 8px; flex: 1; }
+        .del-btn { color: var(--danger); padding: 5px 8px; font-size: 16px; transition: opacity 0.2s; }
+        .del-btn:active { opacity: 0.5; }
+
+        .chapter-container {
+            display: none; 
+            margin-left: 10px;
+            padding-left: 10px;
+            border-left: 2px solid #E5E5EA;
+            margin-bottom: 20px;
+        }
+        .chapter-container.open { display: block; }
+        .chapter-item {
+            padding: 12px;
+            margin: 5px 0;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        #app {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            position: relative; padding: 0 10px;
+        }
+
+        .tap-area-container {
+            position: absolute; top: 50%; left: 0; right: 0; bottom: 0;
+            display: flex; z-index: 1;
+        }
+        .tap-zone { flex: 1; height: 100%; cursor: pointer; }
+
+        .card {
+            width: 85vw; max-width: 400px; height: 400px;
+            background: var(--card); border-radius: 28px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 30px; box-sizing: border-box;
+            position: relative; z-index: 2;
+            transition: all 0.5s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+            border: 2px solid transparent;
+        }
+
+        .card.mastered {
+            background: linear-gradient(145deg, #2c2c2e, #1c1c1e);
+            border-color: var(--master-gold);
+            box-shadow: 0 15px 50px rgba(212, 175, 55, 0.2);
+        }
+        .card.mastered .word { color: #FFFFFF; }
+        .card.mastered .phonetic { color: #A1A1A6; }
+        .card.mastered .meaning { color: #E5E5EA; }
+
+        .word { font-size: 40px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; text-align: center; }
+        .phonetic { font-size: 17px; color: var(--text-sub); margin-bottom: 30px; font-family: "SF Mono", monospace; }
+        
+        .meaning { 
+            font-size: 20px; color: #333; line-height: 1.5; text-align: center; 
+            padding: 10px; border-radius: 10px; transition: all 0.3s;
+            min-width: 100px; min-height: 1.5em;
+        }
+        .meaning:focus { 
+            background: rgba(0, 122, 255, 0.05);
+            box-shadow: inset 0 0 0 1px var(--accent);
+        }
+
+        .blur { filter: blur(12px); opacity: 0.15; }
+
+        .card-top-right {
+            position: absolute; top: 20px; right: 20px;
+            display: flex; align-items: center; gap: 15px; z-index: 10;
+        }
+
+        .mark-btn { 
+            font-size: 24px; color: #E5E5EA; cursor: pointer; 
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.2s; 
+        }
+        .mark-btn.active { 
+            color: var(--star-active); 
+            transform: scale(1.3) rotate(15deg); 
+        }
+
+        .master-btn {
+            font-size: 18px; font-weight: 600; color: #E5E5EA;
+            padding: 4px 10px; border: 1.5px solid #E5E5EA; border-radius: 8px;
+            cursor: pointer; transition: all 0.3s;
+        }
+        .master-btn.active { color: var(--master-gold); border-color: var(--master-gold); background: rgba(212,175,55,0.1); }
+
+        #toast {
+            position: fixed; top: 15%; left: 50%; transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.75); color: white;
+            padding: 10px 20px; border-radius: 20px; font-size: 14px;
+            z-index: 3000; display: none; backdrop-filter: blur(5px);
+            animation: fadeInOut 2s forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translate(-50%, -20px); }
+            15% { opacity: 1; transform: translate(-50%, 0); }
+            85% { opacity: 1; transform: translate(-50%, 0); }
+            100% { opacity: 0; transform: translate(-50%, -20px); }
+        }
+
+        .bottom-shelf { padding: 20px 20px calc(80px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 15px; position: relative; z-index: 10; }
+        .blur-tabs { background: #E3E3E6; padding: 3px; border-radius: 12px; display: flex; }
+        .blur-tabs button { border: none; background: none; padding: 8px 16px; border-radius: 9px; font-size: 14px; cursor: pointer; }
+        .blur-tabs button.active { background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        #progress { font-size: 13px; color: var(--text-sub); }
+
+        #import-modal { position: fixed; inset: 0; background: white; z-index: 2000; display: none; padding: 40px 20px; overflow-y: auto; }
+        .action-btn { width: 100%; padding: 16px; border-radius: 14px; border: none; font-size: 17px; font-weight: 600; background: var(--accent); color: white; margin-bottom: 10px; cursor: pointer; }
+        textarea { width: 100%; height: 120px; background: var(--bg); border: none; border-radius: 15px; padding: 15px; box-sizing: border-box; margin: 10px 0; font-size: 16px; }
+        .import-input { width: 100%; padding: 12px; background: var(--bg); border: none; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+<div id="toast">提示信息</div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<header>
+    <div class="nav-icon" onclick="toggleSidebar()">☰</div>
+    <div id="mode-title">未导入词库</div>
+    <div class="nav-icon" id="header-star" onclick="toggleMarkedMode()">⭐</div>
+</header>
+
+<div id="sidebar">
+    <h2 style="margin-top:0">我的词库</h2>
+    <div id="sidebar-content"></div>
+    <button class="action-btn" onclick="showImport()" style="margin-top:20px; background:#34C759">➕ 导入新词库</button>
+</div>
+
+<div id="app">
+    <div class="tap-area-container">
+        <div class="tap-zone" onclick="prevCard()"></div>
+        <div class="tap-zone" onclick="nextCard()"></div>
+    </div>
+
+    <div class="card" id="main-card" onclick="tempUnblur()">
+        <div class="card-top-right">
+            <div class="master-btn" id="master-status" onclick="toggleMaster(event)">熟</div>
+            <div class="mark-btn" onclick="toggleMark(event)" id="mark-star">★</div>
+        </div>
+        <div id="word-display" class="word">Ready?</div>
+        <div id="phonetic-display" class="phonetic">请导入 TXT</div>
+        <div id="meaning-display" class="meaning" contenteditable="false" onblur="disableEdit(this)" onclick="enableEdit(event, this)"></div>
+    </div>
+</div>
+
+<div class="bottom-shelf">
+    <div id="progress">0 / 0</div>
+    <div class="blur-tabs">
+        <button id="btn-none" class="active" onclick="setBlur('none')">清晰</button>
+        <button id="btn-word" onclick="setBlur('word')">遮单词</button>
+        <button id="btn-meaning" onclick="setBlur('meaning')">遮释义</button>
+    </div>
+</div>
+
+<div id="import-modal">
+    <h2>导入单词</h2>
+    <input type="text" id="import-book-name" class="import-input" placeholder="输入词库名称（如：四级核心词）">
+    <input type="file" id="file-selector" accept=".txt" style="display:none" onchange="handleFileSelect(this)">
+    <button class="action-btn" onclick="document.getElementById('file-selector').click()" style="background:#5856D6">📁 选择 TXT 文件</button>
+    <textarea id="import-text" placeholder="或者直接在此粘贴内容...
+格式为单词 [音标] 翻译
+只能导入一个内容 新导入的会直接替换掉旧的"></textarea>
+    <button class="action-btn" onclick="processImport()">确认导入并打乱</button>
+    <button class="action-btn" onclick="hideImport()" style="background:#8E8E93">取消</button>
+</div>
+
+<script>
+    let words = [];
+    let markedIndexes = new Set();
+    let masteredIndexes = new Set();
+    let currentIndex = 0;
+    let blurMode = 'none'; 
+    let isShowingMarked = false;
+    let currentBookName = "我的词库"; 
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.innerText = msg;
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 2000);
+    }
+
+    function sfc32(a, b, c, d) {
+        return function() {
+            a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0; 
+            var t = (a + b) | 0;
+            a = b ^ (b >>> 9);
+            b = (c + (c << 3)) | 0;
+            c = (c << 21) | (c >>> 11);
+            d = (d + 1) | 0;
+            t = (t + d) | 0;
+            c = (c + t) | 0;
+            return (t >>> 0) / 4294967296;
+        }
+    }
+
+    window.onload = () => {
+        const savedWords = localStorage.getItem('vocab_words');
+        const savedMarks = localStorage.getItem('vocab_marks');
+        const savedMasters = localStorage.getItem('vocab_masters');
+        const savedIndex = localStorage.getItem('vocab_index');
+        const savedBookName = localStorage.getItem('vocab_bookname');
+        
+        if (savedWords && JSON.parse(savedWords).length > 0) {
+            words = JSON.parse(savedWords);
+            currentBookName = savedBookName || "默认词库";
+            if (savedMarks) markedIndexes = new Set(JSON.parse(savedMarks));
+            if (savedMasters) masteredIndexes = new Set(JSON.parse(savedMasters));
+            if (savedIndex) currentIndex = parseInt(savedIndex);
+            updateSidebarUI();
+            renderCard();
+        } else {
+            resetToEmpty();
+        }
+    };
+
+    function resetToEmpty() {
+        words = [];
+        markedIndexes.clear();
+        masteredIndexes.clear();
+        currentIndex = 0;
+        currentBookName = "未导入词库";
+        clearImportModal(); // 同时也清空模态框
+        updateSidebarUI();
+        renderCard();
+    }
+
+    // 新增：专门用于清空模态框内容的函数
+    function clearImportModal() {
+        document.getElementById('import-book-name').value = "";
+        document.getElementById('import-text').value = "";
+        document.getElementById('file-selector').value = ""; // 清空文件选择
+    }
+
+    function saveData() {
+        localStorage.setItem('vocab_words', JSON.stringify(words));
+        localStorage.setItem('vocab_marks', JSON.stringify(Array.from(markedIndexes)));
+        localStorage.setItem('vocab_masters', JSON.stringify(Array.from(masteredIndexes)));
+        localStorage.setItem('vocab_index', currentIndex.toString());
+        localStorage.setItem('vocab_bookname', currentBookName);
+    }
+
+    function enableEdit(e, el) {
+        if(words.length === 0) return;
+        e.stopPropagation(); 
+        el.contentEditable = "true";
+        el.focus();
+    }
+
+    function disableEdit(el) {
+        el.contentEditable = "false";
+        saveMeaningChange(el);
+    }
+
+    function saveMeaningChange(el) {
+        const currentList = isShowingMarked ? words.filter((_, i) => markedIndexes.has(i)) : words;
+        if (currentList.length === 0) return;
+        const data = currentList[currentIndex];
+        const realIndex = words.indexOf(data);
+        if (realIndex !== -1) {
+            words[realIndex].meaning = el.innerText.trim();
+            saveData();
+            showToast("已保存释义修改");
+        }
+    }
+
+    function toggleSidebar() {
+        if(!document.getElementById('sidebar').classList.contains('active')) {
+            updateSidebarUI();
+        }
+        document.getElementById('sidebar').classList.toggle('active');
+        document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+
+    function showImport() { 
+        clearImportModal(); // 打开模态框前先清空旧内容
+        document.getElementById('import-modal').style.display = 'block'; 
+    }
+
+    function hideImport() { document.getElementById('import-modal').style.display = 'none'; }
+
+    function handleFileSelect(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => document.getElementById('import-text').value = e.target.result;
+        reader.readAsText(file);
+    }
+
+    function processImport() {
+        const text = document.getElementById('import-text').value;
+        const bookInput = document.getElementById('import-book-name').value.trim();
+        const lines = text.split('\n');
+        let newWords = [];
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed) {
+                const match = trimmed.match(/^(\d+)?\s*([a-zA-Z\s\-\.]+)\s+([\[\/].+?[\]\/])?\s*(.+)$/);
+                if (match) {
+                    newWords.push({ word: match[2].trim(), phonetic: match[3] || '', meaning: match[4].trim() });
+                }
+            }
+        });
+        if (newWords.length > 0) {
+            const seed = newWords.length; 
+            const rand = sfc32(seed, 0x9E3779B9, 0x243F6A88, 0xB7E15162);
+            for (let i = newWords.length - 1; i > 0; i--) {
+                const j = Math.floor(rand() * (i + 1));
+                [newWords[i], newWords[j]] = [newWords[j], newWords[i]];
+            }
+            words = newWords;
+            currentBookName = bookInput || "新词库";
+            markedIndexes.clear();
+            masteredIndexes.clear();
+            currentIndex = 0;
+            isShowingMarked = false;
+            updateSidebarUI();
+            saveData();
+            renderCard();
+            hideImport();
+            showToast(`词库《${currentBookName}》导入成功`);
+        }
+    }
+
+    function deleteBook(e) {
+        e.stopPropagation();
+        if (confirm(`确定要彻底删除词库《${currentBookName}》及其学习记录吗？`)) {
+            localStorage.clear();
+            resetToEmpty();
+            showToast("词库已清空");
+        }
+    }
+
+    function updateSidebarUI() {
+        const content = document.getElementById('sidebar-content');
+        content.innerHTML = '';
+
+        if (words.length === 0) {
+            content.innerHTML = '<div style="color:#8E8E93; text-align:center; padding:20px;">暂无词库</div>';
+            return;
+        }
+
+        const bookDiv = document.createElement('div');
+        bookDiv.className = 'book-item';
+        bookDiv.innerHTML = `
+            <div class="book-info">
+                <span>📚 ${currentBookName}</span>
+                <span class="chevron">▼</span>
+            </div>
+            <div class="del-btn" onclick="deleteBook(event)">🗑️</div>
+        `;
+        
+        const chapterContainer = document.createElement('div');
+        chapterContainer.className = 'chapter-container open';
+
+        bookDiv.querySelector('.book-info').onclick = () => {
+            chapterContainer.classList.toggle('open');
+            bookDiv.querySelector('.chevron').innerText = chapterContainer.classList.contains('open') ? '▼' : '▶';
+        };
+
+        const chapterSize = 200;
+        const currentChapterIndex = Math.floor(currentIndex / chapterSize);
+
+        for (let i = 0; i < Math.ceil(words.length / chapterSize); i++) {
+            const chapItem = document.createElement('div');
+            chapItem.className = 'chapter-item';
+            const isActive = (i === currentChapterIndex && !isShowingMarked);
+            
+            chapItem.style.background = isActive ? '#3A3A3C' : 'transparent';
+            chapItem.style.color = isActive ? '#FFFFFF' : '#1C1C1E';
+            chapItem.innerText = `第 ${i + 1} 章 (${i * chapterSize + 1}-${Math.min((i + 1) * chapterSize, words.length)})`;
+            
+            chapItem.onclick = (e) => {
+                e.stopPropagation();
+                currentIndex = i * chapterSize; 
+                isShowingMarked = false; 
+                renderCard(); 
+                saveData();
+                updateSidebarUI();
+                toggleSidebar();
+            };
+            chapterContainer.appendChild(chapItem);
+        }
+
+        content.appendChild(bookDiv);
+        content.appendChild(chapterContainer);
+    }
+
+    function renderCard() {
+        const currentList = isShowingMarked ? words.filter((_, i) => markedIndexes.has(i)) : words;
+        document.getElementById('mode-title').innerText = "大词库";
+        document.getElementById('header-star').classList.toggle('mode-active', isShowingMarked);
+
+        if (currentList.length === 0) {
+            document.getElementById('word-display').innerText = isShowingMarked ? "收藏夹空空如也" : "Ready?";
+            document.getElementById('phonetic-display').innerText = words.length === 0 ? "请导入 TXT" : "";
+            document.getElementById('meaning-display').innerText = "";
+            document.getElementById('progress').innerText = "0 / 0";
+            return;
+        }
+
+        if (currentIndex >= currentList.length) currentIndex = 0;
+        const data = currentList[currentIndex];
+        const realIndex = words.indexOf(data);
+
+        document.getElementById('word-display').innerText = data.word;
+        document.getElementById('phonetic-display').innerText = data.phonetic;
+        document.getElementById('meaning-display').innerText = data.meaning;
+        
+        const cardEl = document.getElementById('main-card');
+        const masterBtn = document.getElementById('master-status');
+        if (masteredIndexes.has(realIndex)) {
+            cardEl.classList.add('mastered');
+            masterBtn.classList.add('active');
+        } else {
+            cardEl.classList.remove('mastered');
+            masterBtn.classList.remove('active');
+        }
+
+        applyBlur();
+        document.getElementById('mark-star').classList.toggle('active', markedIndexes.has(realIndex));
+        document.getElementById('progress').innerText = `${currentIndex + 1} / ${currentList.length}`;
+    }
+
+    function toggleMarkedMode() {
+        if (words.length === 0) return;
+        isShowingMarked = !isShowingMarked;
+        currentIndex = 0;
+        renderCard();
+        showToast(isShowingMarked ? "已进入：收藏模式" : "已切换回：当前词库");
+    }
+
+    function applyBlur() {
+        const elements = [document.getElementById('word-display'), document.getElementById('phonetic-display'), document.getElementById('meaning-display')];
+        elements.forEach(el => el.classList.remove('blur'));
+        if (blurMode === 'word') {
+            elements[0].classList.add('blur');
+            elements[1].classList.add('blur');
+        } else if (blurMode === 'meaning') {
+            elements[2].classList.add('blur');
+        }
+    }
+
+    function tempUnblur() {
+        const elements = [document.getElementById('word-display'), document.getElementById('phonetic-display'), document.getElementById('meaning-display')];
+        elements.forEach(el => el.classList.remove('blur'));
+    }
+
+    function setBlur(mode) {
+        blurMode = mode;
+        document.querySelectorAll('.blur-tabs button').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-' + mode).classList.add('active');
+        renderCard();
+    }
+
+    function nextCard() {
+        const currentList = isShowingMarked ? words.filter((_, i) => markedIndexes.has(i)) : words;
+        if (currentIndex < currentList.length - 1) { currentIndex++; renderCard(); saveData(); }
+    }
+
+    function prevCard() {
+        if (currentIndex > 0) { currentIndex--; renderCard(); saveData(); }
+    }
+
+    function toggleMark(e) {
+        e.stopPropagation();
+        const currentList = isShowingMarked ? words.filter((_, i) => markedIndexes.has(i)) : words;
+        if (currentList.length === 0) return;
+        const realIndex = words.indexOf(currentList[currentIndex]);
+        if (markedIndexes.has(realIndex)) {
+            markedIndexes.delete(realIndex);
+        } else {
+            markedIndexes.add(realIndex);
+        }
+        renderCard();
+        saveData();
+    }
+
+    function toggleMaster(e) {
+        e.stopPropagation(); 
+        const currentList = isShowingMarked ? words.filter((_, i) => markedIndexes.has(i)) : words;
+        if (currentList.length === 0) return;
+        const realIndex = words.indexOf(currentList[currentIndex]);
+        
+        if (masteredIndexes.has(realIndex)) {
+            masteredIndexes.delete(realIndex);
+            showToast("到底会不会?");
+        } else {
+            masteredIndexes.add(realIndex);
+            showToast("太好了!该词已标记为熟练");
+        }
+        renderCard();
+        saveData();
+    }
+</script>
+</body>
+</html>
